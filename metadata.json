@@ -1,0 +1,7 @@
+{
+  "name": "Sonecando",
+  "description": "Um despertador inteligente que toca baseado na sua localização geográfica, ideal para não perder o ponto no transporte público.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

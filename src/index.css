@@ -1,0 +1,50 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+@import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+
+:root {
+  --bg: #f8fafc;
+  --ink: #0f172a;
+  --accent: #3b82f6;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Map Circle Pulse Animation */
+@keyframes circle-pulse {
+  0% {
+    fill-opacity: 0.3;
+    stroke-opacity: 0.5;
+  }
+  50% {
+    fill-opacity: 0.6;
+    stroke-opacity: 0.9;
+  }
+  100% {
+    fill-opacity: 0.3;
+    stroke-opacity: 0.5;
+  }
+}
+
+.animate-circle-pulse {
+  animation: circle-pulse 3s ease-in-out infinite;
+}
