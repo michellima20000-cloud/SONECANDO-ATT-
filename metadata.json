@@ -1,6 +1,6 @@
 {
-  "name": "Sonecando",
-  "description": "Um despertador inteligente que toca baseado na sua localização geográfica, ideal para não perder o ponto no transporte público.",
+  "name": "Sonecando Pro",
+  "description": "Despertador inteligente baseado em localização com sincronização em nuvem e segurança máxima via login e senha.",
   "requestFramePermissions": [
     "geolocation"
   ]

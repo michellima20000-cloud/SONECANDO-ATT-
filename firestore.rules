@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'createdAt', 'settings']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             (data.displayName == null || data.displayName is string) &&
+             (data.createdAt == null || data.createdAt is string) &&
+             (data.settings == null || data.settings is map);
+    }
+
+    function isValidHistory(data) {
+      return hasRequiredFields(['id', 'name', 'lat', 'lng', 'timestamp', 'count']) &&
+             data.id is string && data.name is string &&
+             data.lat is number && data.lng is number &&
+             data.timestamp is number && data.count is number;
+    }
+
+    function isValidRoute(data) {
+      return hasRequiredFields(['id', 'name', 'destinations', 'createdAt']) &&
+             data.id is string && data.name is string &&
+             data.destinations is list && data.createdAt is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+                      request.resource.data.uid == resource.data.uid &&
+                      request.resource.data.email == resource.data.email;
+
+      match /history/{destId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidHistory(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /routes/{routeId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidRoute(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}

@@ -28,7 +28,7 @@ interface MapProps {
   currentStopIndex: number;
   transportMode?: 'car' | 'bus' | 'train';
   autoCenter?: boolean;
-  simulationCoords?: [number, number][];
+  onAutoCenterChange?: (enabled: boolean) => void;
 }
 
 function RoutingMachine({ start, waypoints, onRouteInfo, onRouteCoordinates }: { 
@@ -185,9 +185,10 @@ function RoutingMachine({ start, waypoints, onRouteInfo, onRouteCoordinates }: {
   );
 }
 
-function MapEvents({ onDestinationSelect, onRadiusSelect }: { 
+function MapEvents({ onDestinationSelect, onRadiusSelect, onDragStart }: { 
   onDestinationSelect: (lat: number, lng: number, quickAlarm?: boolean) => void;
   onRadiusSelect?: (lat: number, lng: number) => void;
+  onDragStart?: () => void;
 }) {
   const map = useMap();
   const [pendingLocation, setPendingLocation] = useState<L.LatLng | null>(null);
@@ -201,6 +202,9 @@ function MapEvents({ onDestinationSelect, onRadiusSelect }: {
         setPendingLocation(e.latlng);
       }
     },
+    dragstart() {
+      if (onDragStart) onDragStart();
+    }
   });
 
   if (!pendingLocation) return null;
@@ -243,16 +247,18 @@ function MapEvents({ onDestinationSelect, onRadiusSelect }: {
   );
 }
 
-function RecenterMap({ center }: { center: [number, number] | null }) {
+function RecenterMap({ center, enabled }: { center: [number, number] | null, enabled: boolean }) {
   const map = useMap();
   useEffect(() => {
-    if (center) {
+    // Only recenter automatically if NOT in auto-center mode (which follows the user)
+    // or if we are explicitly jumping to a new destination
+    if (center && !enabled) {
       map.flyTo(center, map.getZoom(), {
         animate: true,
         duration: 1.5
       });
     }
-  }, [center, map]);
+  }, [center, map, enabled]);
   return null;
 }
 
@@ -274,12 +280,33 @@ function ResizeHandler() {
 
 function FollowMarker({ position, enabled }: { position: [number, number] | null, enabled: boolean }) {
   const map = useMap();
+  const isFirstMove = useRef(true);
+
   useEffect(() => {
     if (enabled && position) {
-      map.flyTo(position, map.getZoom(), {
-        animate: true,
-        duration: 1
-      });
+      const currentLatLng = L.latLng(position[0], position[1]);
+      const mapCenter = map.getCenter();
+      const distance = mapCenter.distanceTo(currentLatLng);
+
+      // Only move if we've moved more than a small threshold or if it's the first time
+      // This prevents jittering on tiny GPS fluctuations
+      if (distance > 2 || isFirstMove.current) {
+        if (distance > 1000 || isFirstMove.current) {
+          // Large jump or first time
+          map.flyTo(position, map.getZoom(), {
+            animate: true,
+            duration: 1.5
+          });
+          isFirstMove.current = false;
+        } else {
+          // Small movement - smoother pan
+          // We use a shorter duration for frequent updates
+          map.panTo(position, {
+            animate: true,
+            duration: 0.5
+          });
+        }
+      }
     }
   }, [position, enabled, map]);
   return null;
@@ -344,7 +371,33 @@ function DraggableRadius({ center, radius, onRadiusChange }: {
   );
 }
 
-export default function Map({ currentLocation, destinations, onDestinationSelect, onRadiusSelect, onRouteInfo, onRouteCoordinates, radius, currentStopIndex, transportMode = 'car', autoCenter = true, simulationCoords = [] }: MapProps) {
+function RecenterButton({ position, onRecenter }: { position: [number, number] | null, onRecenter: () => void }) {
+  const map = useMap();
+  if (!position) return null;
+
+  return (
+    <div className="leaflet-bottom leaflet-right mb-6 mr-6 z-[1000] pointer-events-none">
+      <div className="leaflet-control pointer-events-auto">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            map.flyTo(position, map.getZoom(), {
+              animate: true,
+              duration: 1.5
+            });
+            onRecenter();
+          }}
+          className="p-3 bg-white hover:bg-blue-50 text-blue-600 rounded-full shadow-2xl border border-slate-200 transition-all active:scale-95 group"
+          title="Centralizar em minha posição"
+        >
+          <Navigation className="w-5 h-5 group-hover:rotate-45 transition-transform" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function Map({ currentLocation, destinations, onDestinationSelect, onRadiusSelect, onRouteInfo, onRouteCoordinates, radius, currentStopIndex, transportMode = 'car', autoCenter = true, onAutoCenterChange }: MapProps) {
   const [mapCenter, setMapCenter] = useState<[number, number]>([-23.5505, -46.6333]); // Default to São Paulo
 
   useEffect(() => {
@@ -460,32 +513,6 @@ export default function Map({ currentLocation, destinations, onDestinationSelect
         />
         
         {/* Visualizing "Stops" along the route (simulated) */}
-        {simulationCoords.length > 0 && simulationCoords.map((coord, idx) => {
-          // Only show every 20th point as a "stop" to avoid clutter
-          if (idx % 20 !== 0 || idx === 0 || idx === simulationCoords.length - 1) return null;
-          
-          const distToDest = activeDest ? L.latLng(coord[0], coord[1]).distanceTo(L.latLng(activeDest[0], activeDest[1])) : Infinity;
-          const isInActivationZone = distToDest <= radius;
-
-          return (
-            <Circle 
-              key={`stop-${idx}`}
-              center={coord}
-              radius={isInActivationZone ? 8 : 5}
-              pathOptions={{ 
-                color: isInActivationZone ? '#ef4444' : '#94a3b8', 
-                fillColor: isInActivationZone ? '#ef4444' : '#94a3b8', 
-                fillOpacity: 0.8, 
-                weight: 1 
-              }}
-            >
-              <Popup>
-                <p className="text-[10px] font-bold">{isInActivationZone ? 'Zona de Alarme' : 'Ponto de Passagem'}</p>
-                <p className="text-[9px] text-slate-500">~{Math.round(distToDest)}m do destino</p>
-              </Popup>
-            </Circle>
-          );
-        })}
 
         <MapEvents 
           onDestinationSelect={onDestinationSelect} 
@@ -496,10 +523,23 @@ export default function Map({ currentLocation, destinations, onDestinationSelect
               onRadiusSelect(Math.round(dist));
             }
           }} 
+          onDragStart={() => {
+            if (autoCenter && onAutoCenterChange) {
+              onAutoCenterChange(false);
+            }
+          }}
         />
-        <RecenterMap center={mapCenter} />
+        <RecenterMap center={mapCenter} enabled={autoCenter} />
         <ResizeHandler />
         <FollowMarker position={currentLocation} enabled={autoCenter} />
+        <RecenterButton 
+          position={currentLocation} 
+          onRecenter={() => {
+            if (!autoCenter && onAutoCenterChange) {
+              onAutoCenterChange(true);
+            }
+          }} 
+        />
       </MapContainer>
     </div>
   );
